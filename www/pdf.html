@@ -1,0 +1,258 @@
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>PDF Converter</title>
+  <script src="https://unpkg.com/pdfjs-dist@3.4.120/build/pdf.min.js"></script>
+  <style>
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
+        Roboto, Oxygen, Ubuntu, Cantarell, "Open Sans", "Helvetica Neue",
+        sans-serif;
+      background-color: #dadce0;
+    }
+
+    .pdf-converter-container {
+      display: flex;
+      justify-content: center;
+      height: 100%;
+    }
+
+    .pdf-converter-container div {
+      box-shadow: 0 0 15px rgba(0, 0, 0, 0.2);
+    }
+
+    .pdf-viewer-container {
+      background-color: #323639;
+      flex-grow: 1;
+      max-width: 800px;
+    }
+
+    .pdf-viewer {
+      height: 100%;
+      width: 100%;
+      border: unset;
+    }
+
+    .pdf-options {
+      padding: 10px;
+      background-color: white;
+    }
+
+    .pdf-options input[name="file-input"] {
+      max-width: 180px;
+    }
+
+    .options-disabled {
+      color: gray;
+    }
+
+    .options {
+      list-style-type: none;
+      padding: 0;
+      margin: 5px 0;
+    }
+
+    .options input[name="pages"] {
+      width: 8em;
+    }
+
+    .options input[name="render"] {
+      margin-top: 20px;
+      float: right;
+    }
+
+    .options label {
+      margin-right: 6px;
+    }
+
+    .hidden {
+      display: none;
+    }
+  </style>
+</head>
+
+<body>
+  <div class="pdf-converter-container">
+    <div class="pdf-viewer-container">
+      <iframe class="pdf-viewer"></iframe>
+    </div>
+
+    <div class="pdf-options">
+      <input name="file-input" type="file" accept=".pdf" />
+      <ul class="options">
+        <li>
+          <label for="pages">Pages</label>
+          <input name="pages" type="text" placeholder="all" />
+        </li>
+        <li>
+          <label for="quality">Quality</label>
+          <input type="range" name="quality" min="0" max="10" value="6"
+            oninput="this.nextElementSibling.textContent = this.value" />
+          <span>6</span>
+        </li>
+        <li>
+          <label for="optimize" title="Changes render scale from 2 to 1">Optimize*</label>
+          <input type="checkbox" name="optimize">
+        </li>
+        <li>
+          <label for="filetype">Filetype</label>
+          <select name="filetype">
+            <option value="jpg">jpg</option>
+            <option value="png" selected>png</option>
+          </select>
+        </li>
+        <input type="button" name="render" value="Render" />
+      </ul>
+    </div>
+  </div>
+
+  <script>
+    const pdfViewer = document.querySelector(".pdf-viewer");
+    const fileInput = document.querySelector('input[name="file-input"]');
+    const options = document.querySelector(".options");
+    const renderBtn = document.querySelector('input[name="render"]');
+
+    pdfjsLib.GlobalWorkerOptions.workerSrc = "https://unpkg.com/pdfjs-dist@3.4.120/build/pdf.worker.js";
+
+    fileInput.addEventListener("change", () => {
+      toggleOptionsDisabled(!!fileInput.files.length);
+
+      const file = fileInput.files[0];
+
+      if (file) {
+        const objectUrl = URL.createObjectURL(file);
+        pdfViewer.src = objectUrl;
+        URL.revokeObjectURL(objectUrl);
+      } else {
+        pdfViewer.src = '';
+      }
+    });
+
+    function toggleOptionsDisabled(state) {
+      const pdfOptionsInputs = options.querySelectorAll("input,select");
+      if (state) {
+        options.classList.remove("options-disabled");
+        pdfOptionsInputs.forEach((i) => (i.disabled = false));
+      } else {
+        options.classList.add("options-disabled");
+        pdfOptionsInputs.forEach((i) => (i.disabled = true));
+      }
+    }
+    toggleOptionsDisabled(false);
+
+    renderBtn.addEventListener("click", async () => {
+      const file = fileInput.files[0];
+      if (!file) return;
+
+      const pages = document.querySelector('input[name="pages"]').value || 'all';
+      const quality = document.querySelector('input[name="quality"]').value / 10;
+      const optimize = document.querySelector('input[name="optimize"]').checked;
+      const filetype = document.querySelector('select[name="filetype"]').value;
+
+      const renderedImages = await convertPdf(file, pages, filetype, 0.5, optimize);
+      console.log(renderedImages);
+
+      renderedImages.forEach(image => {
+        const a = document.createElement("a");
+        a.href = URL.createObjectURL(image.blob);
+        a.download = file.name.replace(/\.[^/.]+$/, '') + `[${image.index}]` + '.' + filetype;
+        a.click();
+      });
+    });
+
+    async function convertPdf(file, pageRanges, filetype, quality, optimize) {
+      const fileArrayBuffer = await fileToArrayBuffer(file);
+      const pdf = await pdfjsLib.getDocument({ data: fileArrayBuffer })
+        .promise;
+
+      const pages = parsePageRanges(pageRanges, pdf.numPages);
+
+      const renderedImages = [];
+
+      for (let i = 0; i < pages.length; i++) {
+        const pageIndex = pages[i];
+
+        if (pageIndex > pdf.numPages) continue;
+
+        console.log(pageIndex);
+
+        const imageblob = await renderPage(await pdf.getPage(pageIndex), filetype, optimize ? 1 : 2, quality);
+
+        renderedImages.push({
+          index: pageIndex,
+          blob: imageblob
+        });
+      };
+
+      return renderedImages;
+    }
+
+    async function renderPage(page, filetype, scale, quality) {
+      var viewport = page.getViewport({ scale: scale });
+
+      var canvas = document.createElement("canvas");
+      var context = canvas.getContext("2d");
+      canvas.height = viewport.height;
+      canvas.width = viewport.width;
+
+      await page.render({
+        canvasContext: context,
+        viewport: viewport,
+      }).promise;
+
+      return canvasToBlob(canvas, filetype, quality);
+    }
+
+    function parsePageRanges(pageRanges, numPages) {
+      let pages = [];
+      if (pageRanges === "all") pages = [...Array(numPages).keys()].map(i => i + 1);
+      else {
+        pageRanges.split(',').forEach(range => {
+          const [startStr, endStr] = range.split('-');
+
+          const start = parseInt(startStr);
+          const end = parseInt(endStr);
+
+          // if start NaN bad things, if end undefined its fine, but if not valid number bad things
+          if (start === NaN || (end !== undefined && end === NaN)) return;
+
+          if (!endStr) pages.push(start);
+          else {
+            for (let i = start; i <= end; i++) {
+              pages.push(i);
+            }
+          }
+        })
+      }
+      return pages;
+    }
+
+    function fileToArrayBuffer(file) {
+      const fileReader = new FileReader();
+
+      return new Promise(res => {
+        fileReader.onload = () => res(fileReader.result);
+        fileReader.readAsArrayBuffer(file);
+      })
+    }
+    function canvasToBlob(canvas, filetype, quality) {
+      return new Promise(res => {
+        canvas.toBlob(
+          (blob) => res(blob),
+          'image/' + (filetype === 'jpg' ? 'jpeg' : filetype),
+          quality
+        );
+      })
+    }
+  </script>
+</body>
+
+</html>
