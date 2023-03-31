@@ -94,12 +94,13 @@
         </li>
         <li>
           <label for="quality">Quality</label>
-          <input type="range" name="quality" min="0" max="10" value="6"
+          <input type="range" name="quality" min="1" max="10" value="6"
             oninput="this.nextElementSibling.textContent = this.value" />
           <span>6</span>
         </li>
         <li>
-          <label for="optimize" title="Changes render scale from 2 to 1">Optimize*</label>
+          <label for="optimize"
+            title="Changes render scale from 2 to 1, and limits resolution to 1000">Optimize*</label>
           <input type="checkbox" name="optimize">
         </li>
         <li>
@@ -176,7 +177,7 @@
 
         if (pageIndex > pdf.numPages) continue;
 
-        console.log(pageIndex);
+        const page = await pdf.getPage(pageIndex)
 
         const maxResolution = 1000;
         // if optimize then scale by 1, if one dimension still larger then maxResolition scale it down.
@@ -196,11 +197,11 @@
           viewport: viewport,
         }).promise;
 
-        const convertedImage = canvasToBlob(canvas, filetype, quality);
+        const convertedImage = await canvasToBlob(canvas, filetype, quality);
 
         const a = document.createElement("a");
-        a.href = URL.createObjectURL(image.blob);
-        a.download = file.name.replace(/\.[^/.]+$/, '') + `[${image.index}]` + '.' + filetype;
+        a.href = URL.createObjectURL(convertedImage);
+        a.download = file.name.replace(/\.[^/.]+$/, '') + `[${pageIndex}]` + '.' + filetype;
         a.click();
       };
     }
