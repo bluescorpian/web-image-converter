@@ -114,7 +114,9 @@
     </div>
   </div>
 
-  <script>
+  <script type="module">
+    import { canvasToBlob } from './utility.js';
+
     const pdfViewer = document.querySelector(".pdf-viewer");
     const fileInput = document.querySelector('input[name="file-input"]');
     const options = document.querySelector(".options");
@@ -184,7 +186,7 @@
 
         console.log(pageIndex);
 
-        const imageblob = await renderPage(await pdf.getPage(pageIndex), filetype, optimize ? 1 : 2, quality);
+        const imageblob = await renderPage(await pdf.getPage(pageIndex), filetype, optimize, quality);
 
         renderedImages.push({
           index: pageIndex,
@@ -195,11 +197,17 @@
       return renderedImages;
     }
 
-    async function renderPage(page, filetype, scale, quality) {
-      var viewport = page.getViewport({ scale: scale });
+    async function renderPage(page, filetype, optimize, quality) {
+      const maxResolution = 1000;
+      // if optimize then scale by 1, if one dimension still larger then maxResolition scale it down.
+      let scale = optimize ? 1 : 2;
+      let viewport = page.getViewport({ scale: scale });
+      if (optimize && (viewport.height > maxResolution || viewport.width > maxResolution)) {
+        viewport = page.getViewport({ scale: scale * (maxResolution / Math.max(viewport.height, viewport.width)) });
+      }
 
-      var canvas = document.createElement("canvas");
-      var context = canvas.getContext("2d");
+      const canvas = document.createElement("canvas");
+      const context = canvas.getContext("2d");
       canvas.height = viewport.height;
       canvas.width = viewport.width;
 
@@ -243,15 +251,15 @@
         fileReader.readAsArrayBuffer(file);
       })
     }
-    function canvasToBlob(canvas, filetype, quality) {
-      return new Promise(res => {
-        canvas.toBlob(
-          (blob) => res(blob),
-          'image/' + (filetype === 'jpg' ? 'jpeg' : filetype),
-          quality
-        );
-      })
-    }
+    // function canvasToBlob(canvas, filetype, quality) {
+    //   return new Promise(res => {
+    //     canvas.toBlob(
+    //       (blob) => res(blob),
+    //       'image/' + (filetype === 'jpg' ? 'jpeg' : filetype),
+    //       quality
+    //     );
+    //   })
+    // }
   </script>
 </body>
 
