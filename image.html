@@ -133,7 +133,9 @@
     </div>
   </div>
   <footer>Made by <b>bluescorpian</b></footer>
-  <script>
+  <script type="module">
+    import { canvasToBlob, saveBlob } from './utility.js';
+
     const options = document.querySelector('.options');
     const fileInputBox = document.querySelector('.file-input-box');
     const fileInput = document.getElementById('fileInput');
@@ -178,7 +180,6 @@
     });
 
     function addFiles(f) {
-      console.log(f);
       files = [...files, ...f];
       selectedFiles.textContent = files.map((file) => file.name).join(', ');
       selectedFiles.classList.remove('hidden');
@@ -210,10 +211,7 @@
           alert("Failed to convert image: " + err); // TODO: improve
         }
 
-        const a = document.createElement("a");
-        a.href = URL.createObjectURL(convertedImage);
-        a.download = file.name.replace(/\.[^/.]+$/, '.' + filetype);
-        a.click();
+        saveBlob(file.name.replace(/\.[^/.]+$/, '.' + filetype), convertedImage);
 
         progressBar.value = i + 1;
       }
@@ -241,32 +239,25 @@
           });
         })
         .then((img) => {
-          return new Promise((res) => {
-            const canvas = document.createElement('canvas');
-            let width = img.width;
-            let height = img.height;
-            if (optimize) {
-              const maxResolution = 1000;
-              // if width or height bigger then max resolution then decrease it so that the biggest one is smaller then maxResolotion
-              if (width > maxResolution || height > maxResolution) {
-                let scaleBy = width > height ? maxResolution / width : maxResolution / height;
-                width *= scaleBy;
-                height *= scaleBy;
-              }
+          const canvas = document.createElement('canvas');
+          let width = img.width;
+          let height = img.height;
+          if (optimize) {
+            const maxResolution = 1000;
+            // if width or height bigger then max resolution then decrease it so that the biggest one is smaller then maxResolotion
+            if (Math.max(width, height) > maxResolution) {
+              let scaleBy = maxResolution / Math.max(width, height);
+              width *= scaleBy;
+              height *= scaleBy;
             }
+          }
 
-            console.log(width, height);
+          canvas.width = width;
+          canvas.height = height;
+          const ctx = canvas.getContext('2d');
+          ctx.drawImage(img, 0, 0, width, height);
 
-            canvas.width = width;
-            canvas.height = height;
-            const ctx = canvas.getContext('2d');
-            ctx.drawImage(img, 0, 0, width, height);
-            canvas.toBlob(
-              blob => res(blob),
-              'image/' + (filetype === 'jpg' ? 'jpeg' : filetype),
-              quality
-            );
-          });
+          return canvasToBlob(canvas, filetype, quality);
         });
     }
   </script>
