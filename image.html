@@ -79,37 +79,6 @@
       display: block;
     }
 
-    .converted-files div {
-      border: 1px rgb(78, 78, 78) solid;
-      border-radius: 5px;
-      padding: 5px;
-      min-height: 60px;
-      min-width: 150px;
-      position: relative;
-      margin: 5px;
-
-      display: inline-flex;
-      flex-direction: column;
-      justify-content: space-between;
-
-      box-shadow: 0 0 6px 0 rgba(0, 0, 0, 0.2);
-      transition: 0.3s;
-    }
-
-    .converted-files div:hover {
-      box-shadow: 0 0 10px 0 rgba(0, 0, 0, 0.3);
-    }
-
-    .converted-files div p {
-      margin: 0;
-      font-size: small;
-    }
-
-    .converted-files div a {
-      text-decoration: none;
-      align-self: flex-end;
-    }
-
     footer {
       text-align: right;
       font-size: smaller;
@@ -140,7 +109,7 @@
       <ul>
         <li>
           <label for="quality">Quality</label>
-          <input type="range" name="quality" min="0" max="10" value="6"
+          <input type="range" name="quality" min="1" max="10" value="6"
             oninput="this.nextElementSibling.textContent = this.value" />
           <span>6</span>
         </li>
@@ -158,14 +127,6 @@
       </ul>
       <button id="convert" class="hidden">Convert</button>
     </div>
-    <div class="converted-files">
-      <template>
-        <div>
-          <p>filename.jpg</p>
-          <a href="#">save</a>
-        </div>
-      </template>
-    </div>
     <div id="progress" class="hidden">
       <label for="progress" style="display: block">Processing</label>
       <progress name="progress" id="progress-bar" max="1"></progress>
@@ -181,7 +142,6 @@
     const convertBtn = document.getElementById('convert');
     const progress = document.getElementById('progress');
     const progressBar = document.getElementById('progress-bar');
-    const convertedFiles = document.querySelector('.converted-files');
     const qualityInput = document.querySelector('input[name="quality"]');
     const convertedFilesTemplate = document.querySelector('.converted-files template');
     let files = [];
@@ -231,7 +191,6 @@
     async function convert() {
       options.classList.add('hidden');
       progress.classList.remove('hidden');
-      convertedFiles.classList.add('hidden');
 
       const quality = parseInt(qualityInput.value) / 10;
       const optimize = document.querySelector('input[name="optimize"]').checked;
@@ -244,26 +203,22 @@
       for (let i = 0; i < files.length; i++) {
         const file = files[i];
 
-        const convertedImage = await convertImage(file, filetype, quality, optimize);
+        let convertedImage;
+        try {
+          convertedImage = await convertImage(file, filetype, quality, optimize);
+        } catch (err) {
+          alert("Failed to convert image: " + err); // TODO: improve
+        }
 
-        convertedImages.push(convertedImage);
+        const a = document.createElement("a");
+        a.href = URL.createObjectURL(convertedImage);
+        a.download = file.name.replace(/\.[^/.]+$/, '.' + filetype);
+        a.click();
 
         progressBar.value = i + 1;
       }
 
-      document.querySelector('.converted-files').append(
-        ...convertedImages.map((img) => {
-          const newFileSaveBox = convertedFilesTemplate.content.cloneNode(true);
-
-          newFileSaveBox.querySelector('p').innerText = img.name;
-          newFileSaveBox.querySelector('a').download = img.name;
-          newFileSaveBox.querySelector('a').href = URL.createObjectURL(img);
-
-          return newFileSaveBox;
-        })
-      );
       options.classList.remove('hidden');
-      convertedFiles.classList.remove('hidden');
 
       progress.classList.add('hidden');
       convertBtn.classList.add('hidden');
@@ -271,6 +226,7 @@
       files = [];
       selectedFiles.innerText = '';
     }
+    // TODO: refactor this
     function convertImage(file, filetype, quality, optimize) {
       return new Promise((res) => {
         const reader = new FileReader();
@@ -291,14 +247,12 @@
             let height = img.height;
             if (optimize) {
               const maxResolution = 1000;
-              let scaleBy;
-              if (width > height && width > maxResolution) {
-                scaleBy = maxResolution / width;
-              } else if (height > width && height > maxResolution) {
-                scaleBy = maxResolution / height;
+              // if width or height bigger then max resolution then decrease it so that the biggest one is smaller then maxResolotion
+              if (width > maxResolution || height > maxResolution) {
+                let scaleBy = width > height ? maxResolution / width : maxResolution / height;
+                width *= scaleBy;
+                height *= scaleBy;
               }
-              width *= scaleBy;
-              height *= scaleBy;
             }
 
             console.log(width, height);
@@ -308,14 +262,8 @@
             const ctx = canvas.getContext('2d');
             ctx.drawImage(img, 0, 0, width, height);
             canvas.toBlob(
-              function (blob) {
-                // const newFile = new File([blob], file.name.replace(/\.[^/.]+$/, '.' + (filetype === 'jpeg' ? 'jpg' : filetype)), {
-                const newFile = new File([blob], file.name.replace(/\.[^/.]+$/, '.' + filetype), {
-                  type: 'image/' + filetype,
-                });
-                res(newFile);
-              },
-              'image/' + filetype,
+              blob => res(blob),
+              'image/' + (filetype === 'jpg' ? 'jpeg' : filetype),
               quality
             );
           });
