@@ -160,14 +160,6 @@
       const filetype = document.querySelector('select[name="filetype"]').value;
 
       const renderedImages = await convertPdf(file, pages, filetype, 0.5, optimize);
-      console.log(renderedImages);
-
-      renderedImages.forEach(image => {
-        const a = document.createElement("a");
-        a.href = URL.createObjectURL(image.blob);
-        a.download = file.name.replace(/\.[^/.]+$/, '') + `[${image.index}]` + '.' + filetype;
-        a.click();
-      });
     });
 
     async function convertPdf(file, pageRanges, filetype, quality, optimize) {
@@ -186,37 +178,31 @@
 
         console.log(pageIndex);
 
-        const imageblob = await renderPage(await pdf.getPage(pageIndex), filetype, optimize, quality);
+        const maxResolution = 1000;
+        // if optimize then scale by 1, if one dimension still larger then maxResolition scale it down.
+        let scale = optimize ? 1 : 2;
+        let viewport = page.getViewport({ scale: scale });
+        if (optimize && (viewport.height > maxResolution || viewport.width > maxResolution)) {
+          viewport = page.getViewport({ scale: scale * (maxResolution / Math.max(viewport.height, viewport.width)) });
+        }
 
-        renderedImages.push({
-          index: pageIndex,
-          blob: imageblob
-        });
+        const canvas = document.createElement("canvas");
+        const context = canvas.getContext("2d");
+        canvas.height = viewport.height;
+        canvas.width = viewport.width;
+
+        await page.render({
+          canvasContext: context,
+          viewport: viewport,
+        }).promise;
+
+        const convertedImage = canvasToBlob(canvas, filetype, quality);
+
+        const a = document.createElement("a");
+        a.href = URL.createObjectURL(image.blob);
+        a.download = file.name.replace(/\.[^/.]+$/, '') + `[${image.index}]` + '.' + filetype;
+        a.click();
       };
-
-      return renderedImages;
-    }
-
-    async function renderPage(page, filetype, optimize, quality) {
-      const maxResolution = 1000;
-      // if optimize then scale by 1, if one dimension still larger then maxResolition scale it down.
-      let scale = optimize ? 1 : 2;
-      let viewport = page.getViewport({ scale: scale });
-      if (optimize && (viewport.height > maxResolution || viewport.width > maxResolution)) {
-        viewport = page.getViewport({ scale: scale * (maxResolution / Math.max(viewport.height, viewport.width)) });
-      }
-
-      const canvas = document.createElement("canvas");
-      const context = canvas.getContext("2d");
-      canvas.height = viewport.height;
-      canvas.width = viewport.width;
-
-      await page.render({
-        canvasContext: context,
-        viewport: viewport,
-      }).promise;
-
-      return canvasToBlob(canvas, filetype, quality);
     }
 
     function parsePageRanges(pageRanges, numPages) {
@@ -251,15 +237,6 @@
         fileReader.readAsArrayBuffer(file);
       })
     }
-    // function canvasToBlob(canvas, filetype, quality) {
-    //   return new Promise(res => {
-    //     canvas.toBlob(
-    //       (blob) => res(blob),
-    //       'image/' + (filetype === 'jpg' ? 'jpeg' : filetype),
-    //       quality
-    //     );
-    //   })
-    // }
   </script>
 </body>
 
